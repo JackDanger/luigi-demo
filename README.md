@@ -9,7 +9,8 @@ Getting Started
   `source env/bin/activate`
 4. Install luigi
   `pip install luigi`
-5. Run files
-  `python WordPicker.py`
-6. Upon completion deactivate virtual environment
+5. Run file
+  `python WordPicker.py FlipWordBackwards`
+6. If you want to re-run the above command you must delete the files it created in the output directory first.
+7. Upon completion deactivate virtual environment
   `deactivate`
