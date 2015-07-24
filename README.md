@@ -13,6 +13,6 @@ Getting Started
 6. View @ localhost:8082
 7. Run file
   `python WordPicker.py FlipWordBackwards`
-8. If you want to re-run the above command you must delete the files it created in the output directory first
+8. If you want to re-run the above command you must delete the files it created in the '/output' directory first
 9. Upon completion, deactivate virtual environment
   `deactivate`
