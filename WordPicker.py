@@ -1,5 +1,52 @@
+import inspect, os
 import luigi
 import random
+import json 
+from connections import LocalConnection 
+
+
+def line():
+    """Returns the current line number in our program."""
+    return inspect.currentframe().f_back.f_lineno
+
+print line()
+
+###
+
+# get the current working directory
+CURRENT_FILE = os.path.abspath(inspect.getfile(inspect.currentframe()))
+CURRENT_PATH = os.path.dirname(CURRENT_FILE)
+
+print line()
+# load a config file
+with open(CURRENT_PATH + '/config.json', 'r') as file_buff:
+    CONFIG = json.loads(file_buff.read())
+
+print line()
+# create the unity connection object
+local_db = LocalConnection.LocalDBConnection(driver=CONFIG['driver'],
+                                     server=CONFIG['server'],
+                                     port=CONFIG['port'],
+                                     database=CONFIG['database'],
+                                     user=CONFIG['user'],
+                                     password=CONFIG['password'])
+
+print line()
+
+# Drop the markers table if it exists
+connection = local_db.connect()
+print line()
+cursor = connection.cursor()
+print line()
+cursor.execute("CREATE TABLE my_test SELECT * FROM luigid.markers;")
+print line()
+connection.commit()
+print line()
+connection.close()
+print line()
+
+
+#####
 
 class WordPicker(luigi.Task):
     def output(self):
