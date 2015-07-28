@@ -2,8 +2,7 @@ import inspect, os
 import luigi
 import random
 import json 
-#from connections import LocalConnection 
-import mysql.connector
+from connections import LocalConnection
 
 def line():
     """Returns the current line number in our program."""
@@ -25,33 +24,9 @@ with open(CURRENT_PATH + '/config.json', 'r') as file_buff:
 print line()
 # create the localdb connection object
 
-cnx = mysql.connector.connect(user=CONFIG['user'],
-                            host=CONFIG['server'],
+local_db = LocalConnection.LocalDBConnection(user=CONFIG['user'],
+                            host=CONFIG['host'],
                             database=CONFIG['database'])
-
-#local_db = LocalConnection.LocalDBConnection(driver=CONFIG['driver'],
-                                    #server=CONFIG['server'],
-                                     #port=CONFIG['port'],
-                                     #database=CONFIG['database'],
-                                     #user=CONFIG['user'],
-                                     #password=CONFIG['password'])
-
-print line()
-
-# Drop the markers table if it exists
-connection = cnx
-print line()
-cursor = connection.cursor()
-print line()
-cursor.execute("CREATE TABLE my_test SELECT * FROM luigid.markers;")
-print line()
-connection.commit()
-print line()
-connection.close()
-print line()
-
-
-#####
 
 class WordPicker(luigi.Task):
     def output(self):

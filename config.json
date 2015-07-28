@@ -1,6 +1,6 @@
 {
     "driver": "MySQL ODBC 5.3 Unicode Driver",
-    "server": "127.0.0.1",
+    "host": "127.0.0.1",
     "port": 3306,
     "database": "luigid",
     "user": "",

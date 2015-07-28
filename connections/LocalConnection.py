@@ -2,8 +2,7 @@
 
 import luigi
 import logging
-import pyodbc
-
+import mysql.connector
 
 logger = logging.getLogger('luigi-interface')
 
@@ -13,16 +12,13 @@ class LocalDBConnection(object):
     Connection to a local MySql box
     """
 
-    def __init__(self, driver, server, port, database, user, password):
+    def __init__(self, host, user, database):
         """
         TODO: docs
         """
-        self.driver = driver
-        self.server = server
-        self.port = port
+        self.host = host
         self.database = database
         self.user = user
-        self.password = password
         self.connection = None
 
 
@@ -30,20 +26,14 @@ class LocalDBConnection(object):
         """
         TODO: docs
         """
-        connection_string = 'Driver={{{driver}}};Server={server};\
-                             Port={port};Database={database};\
-                             User={user};Password={password}'\
-                             .format(driver=self.driver,
-                                     server=self.server,
-                                     port=self.port,
+        connection_string = 'Host={host};\
+                             Database={database};\
+                             User={user}'\
+                             .format(host=self.host,
                                      database=self.database,
-                                     user=self.user,
-                                     password=self.password)
+                                     user=self.user)
 
-        cnx = mysql.connector.connect(user=CONFIG['user'],
-                            host=CONFIG['server'],
-                            database=CONFIG['database'])
-self.connection = pyodbc.connect(connection_string)
+        self.connection = mysql.connector.connect(connection_string)
         return self.connection
 
     def close(self):
