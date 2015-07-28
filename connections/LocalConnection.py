@@ -40,7 +40,10 @@ class LocalDBConnection(object):
                                      user=self.user,
                                      password=self.password)
 
-        self.connection = pyodbc.connect(connection_string)
+        cnx = mysql.connector.connect(user=CONFIG['user'],
+                            host=CONFIG['server'],
+                            database=CONFIG['database'])
+self.connection = pyodbc.connect(connection_string)
         return self.connection
 
     def close(self):

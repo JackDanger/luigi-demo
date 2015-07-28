@@ -2,8 +2,8 @@ import inspect, os
 import luigi
 import random
 import json 
-from connections import LocalConnection 
-
+#from connections import LocalConnection 
+import mysql.connector
 
 def line():
     """Returns the current line number in our program."""
@@ -23,18 +23,23 @@ with open(CURRENT_PATH + '/config.json', 'r') as file_buff:
     CONFIG = json.loads(file_buff.read())
 
 print line()
-# create the unity connection object
-local_db = LocalConnection.LocalDBConnection(driver=CONFIG['driver'],
-                                     server=CONFIG['server'],
-                                     port=CONFIG['port'],
-                                     database=CONFIG['database'],
-                                     user=CONFIG['user'],
-                                     password=CONFIG['password'])
+# create the localdb connection object
+
+cnx = mysql.connector.connect(user=CONFIG['user'],
+                            host=CONFIG['server'],
+                            database=CONFIG['database'])
+
+#local_db = LocalConnection.LocalDBConnection(driver=CONFIG['driver'],
+                                    #server=CONFIG['server'],
+                                     #port=CONFIG['port'],
+                                     #database=CONFIG['database'],
+                                     #user=CONFIG['user'],
+                                     #password=CONFIG['password'])
 
 print line()
 
 # Drop the markers table if it exists
-connection = local_db.connect()
+connection = cnx
 print line()
 cursor = connection.cursor()
 print line()
