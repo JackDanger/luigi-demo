@@ -1,7 +1,8 @@
 import inspect, os
 import luigi
 import random
-import json 
+import json
+from luigi.contrib.mysqldb import MySqlTarget
 from connections import LocalConnection
 
 def line():
@@ -30,15 +31,18 @@ local_db = LocalConnection.LocalDBConnection(user=CONFIG['user'],
 
 class WordPicker(luigi.Task):
     def output(self):
-        return luigi.LocalTarget('./output/word-picker/word.txt')
+        return MySqlTarget(user=CONFIG['user'],
+                           host=CONFIG['host'],
+                           database=CONFIG['database'], 
+                           password="",
+                          update_id="", 
+                          table="")
 
     def run(self):
         words = ["purple", "blue", "tooth", "beachball"]
         index = random.randint(0,3)
         chosen_word = words[index]
-
-        with self.output().open('w') as f:
-            f.write(chosen_word)
+        self.output().touch() # updating marker table?
 
 class FlipWordBackwards(luigi.Task):
     def requires(self):
