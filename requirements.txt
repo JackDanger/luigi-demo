@@ -1,0 +1,3 @@
+--allow-unverified mysql-connector-python
+luigi
+PyYAML
