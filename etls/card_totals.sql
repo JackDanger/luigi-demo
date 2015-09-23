@@ -11,5 +11,6 @@ data:
 INSERT INTO {{{ output_table }}} (total, date)
   SELECT COUNT(*) AS total, DATE(created_at) AS date
   FROM payments
-  WHERE type = 'cash' -- Demonstrating an inline comment
+  WHERE type = 'CardPayment' -- Demonstrating an inline comment
     AND DATE(created_at) == {{{ now }}}
+  GROUP BY DATE(created_at)

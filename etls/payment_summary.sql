@@ -16,6 +16,8 @@ data:
       - jackdanger_card_totals
 ---
 {{#payment_tables}}
+-- Inside a Mustache loop the '.' variable means this iteration's value for
+-- current value of the `payment_tables` list.
 INSERT INTO {{{output_table}}} (total, type, day)
   SELECT total, '{{.}}', day
   FROM {{.}};

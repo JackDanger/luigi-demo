@@ -1,13 +1,14 @@
 import mysql.connector
 import luigi
+from luigi.contrib.redshift import RedshiftTarget
 import time
 import yaml
 from datetime import datetime
 
-class Db:
+class MySQL:
     @staticmethod
     def execute(sql):
-        connection = mysql.connector.connect(user='', password='', host='127.0.0.1', database='yaml_practice')
+        connection = mysql.connector.connect(user='user', host='localhost', database='luigid')
         connection.connect()
         cursor = connection.cursor()
         cursor.execute(sql)
@@ -20,7 +21,29 @@ class Db:
     def execute_yaml_file(filename):
         with open(filename, 'r') as ymlfile:
             data = yaml.load(ymlfile)
-            return Db.execute(data['sql'])
+            return MySQL.execute(data['sql'])
+
+class Redshift:
+    @staticmethod
+    def fetchone(sql):
+        return Redshift.execute(sql).fetchone()
+
+    @staticmethod
+    def fetchall(sql):
+        return Redshift.execute(sql).fetchall()
+
+    @staticmethod
+    def execute(sql):
+        cursor = Redshift.cursor()
+        cursor.execute(sql)
+        return cursor
+
+    @staticmethod
+    def cursor():
+        """Connects to Redshift, returns a cursor for the connection"""
+        with open('database.yml', 'r') as ymlfile:
+            dbconfig = yaml.load(ymlfile)
+        return RedshiftTarget(**dbconfig).connect().cursor()
 
 class Markers(luigi.Target):
     def __init__(self, key, value):
@@ -28,7 +51,7 @@ class Markers(luigi.Target):
         self.value = value
 
     def create_marker_table(self):
-        Db.execute(
+        Redshift.execute(
             """
                 CREATE TABLE IF NOT EXISTS markers (
                     id              BIGINT(20)    NOT NULL AUTO_INCREMENT
@@ -42,7 +65,7 @@ class Markers(luigi.Target):
 
     def exists(self):
         self.create_marker_table()
-        row = Db.execute(
+        return Redshift.fetchone(
             """
                 SELECT 1
                 FROM markers
@@ -51,25 +74,23 @@ class Markers(luigi.Target):
                     AND mark_value = '{value}';
             """.format(key=self.key,
                        value=self.value))
-        return row is not None
 
     def mark_table(self):
         self.create_marker_table()
-        Db.execute(
+        Redshift.execute(
             """
                 INSERT INTO markers (mark_key, mark_value)
                 VALUES ('{key}', '{value}');
             """.format(key=self.key,
                        value=self.value)
             )
-         
 
 class MakeDateColumnOnChildrenStories(luigi.Task):
     def output(self):
         return Markers('make_new_column', 'date_column_in_children_stories')
 
     def run(self):
-        Db.execute(
+        MySQL.execute(
             """
             ALTER TABLE
             children_stories
@@ -94,7 +115,7 @@ class Story(luigi.Task):
     #         self.output().execute(data['sql'])  
 
     def run(self):
-        s = Db.execute_yaml_file("todays_top_story.yaml") #FIX tried using self.output().read_sql but...
+        s = MySQL.execute_yaml_file("todays_top_story.yaml") #FIX tried using self.output().read_sql but...
         mark = self.output()
         mark.mark_table()
 
@@ -109,22 +130,29 @@ class StoryCount(luigi.Task):
     	return Markers('children_stories_count', self.date_interval)
 
     def run(self):
-        row = Db.execute_yaml_file("story_count.yaml")
+        row = MySQL.execute_yaml_file("story_count.yaml")
         mark = self.output()
         mark.mark_table()
         return
                 
 
 
-# class YamlPoweredTask(luigi.Task):
-#     file_name = ""
-#     yaml = dict()#somehow_read_yaml()
+class YamlPoweredTask(luigi.Task):
+    file_name = ""
+    yaml = dict()#somehow_read_yaml()
 
-#     def requires(self):
-#         return [YamlPoweredTask(file_name=dependency) for dependency in self.yaml['dependencies']]
+    def requires(self):
+        return [YamlPoweredTask(file_name=dependency) for dependency in self.yaml['dependencies']]
 
-#     def run(self):
-#         execute(self.yaml['sql'])
+    def run(self):
+        execute(self.yaml['sql'])
 
 if __name__ == "__main__":
+    conn = t.connect()
+    print dir(conn)
+    cursor = conn.cursor()
+    print dir(cursor)
+    cursor.execute("select relname from pg_class where relkind='r' and relname !~ '^(pg_|sql_)';")
+    print cursor.fetchall()
+
     luigi.run()
