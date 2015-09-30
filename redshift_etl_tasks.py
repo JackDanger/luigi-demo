@@ -1,9 +1,14 @@
 import mysql.connector
 import luigi
 from luigi.contrib.redshift import RedshiftTarget
+
 import time
 import yaml
-from datetime import datetime
+import datetime
+
+import subprocess
+import os
+import re
 
 class MySQL:
     @staticmethod
@@ -42,8 +47,10 @@ class Redshift:
     def cursor():
         """Connects to Redshift, returns a cursor for the connection"""
         with open('database.yml', 'r') as ymlfile:
-            dbconfig = yaml.load(ymlfile)
-        return RedshiftTarget(**dbconfig).connect().cursor()
+            dbconfig = yaml.load(ymlfile)['localhost']
+        connection = RedshiftTarget(**dbconfig).connect()
+        connection.autocommit = True
+        return connection.cursor()
 
 class Markers(luigi.Target):
     def __init__(self, key, value):
@@ -54,7 +61,7 @@ class Markers(luigi.Target):
         Redshift.execute(
             """
                 CREATE TABLE IF NOT EXISTS markers (
-                    id              BIGINT(20)    NOT NULL AUTO_INCREMENT
+                    id              BIGSERIAL
                     , mark_key      VARCHAR(128)  NOT NULL
                     , mark_value    VARCHAR(128)  NOT NULL
                     , inserted      TIMESTAMP DEFAULT NOW()
@@ -82,77 +89,107 @@ class Markers(luigi.Target):
                 INSERT INTO markers (mark_key, mark_value)
                 VALUES ('{key}', '{value}');
             """.format(key=self.key,
-                       value=self.value)
-            )
+                       value=self.value))
 
-class MakeDateColumnOnChildrenStories(luigi.Task):
-    def output(self):
-        return Markers('make_new_column', 'date_column_in_children_stories')
-
-    def run(self):
-        MySQL.execute(
+    @staticmethod
+    def truncate():
+        """Remove all marker entries"""
+        return Redshift.execute(
             """
-            ALTER TABLE
-            children_stories
-            ADD date datetime
+                TRUNCATE markers;
             """
         )
-        mark = self.output()
-        mark.mark_table()
 
-class Story(luigi.Task):
-    date = luigi.DateParameter()
 
-    def requires(self):
-        return MakeDateColumnOnChildrenStories()
+class HsqlTask(luigi.Task):
+    file = luigi.Parameter(significant=False)
+    environment = luigi.Parameter(default='development')
+    # An hour timestamp specified in the following format:
+    #   2015-06-02T00 (midnight UTC on June 2nd)
+    #   2015-08-04T17 (1700 hours UTC on August 4th)
+    hour = luigi.DateHourParameter(default=datetime.datetime.utcnow())
+    queries = None
+    config = None
+    task_id = 'hsql'
+
+    def __init__(self, *args, **kwargs):
+        # Customize the task name
+
+        # Set a custom task_family instead of the class name
+        self.task_family = HsqlTask.file_to_id(kwargs['file'])
+
+        # This is mostly copied from luigi/task.py's __init__
+        param_values = self.get_param_values(self.get_params(), args, kwargs)
+        task_id_parts = []
+        for name, value in param_values:
+            if name is not 'file':
+                task_id_parts.append('%s=%s' % (name, value))
+        self.task_id = '%s(%s)' % (self.task_family, ', '.join(task_id_parts))
+
+        super(HsqlTask, self).__init__(*args, **kwargs)
 
     def output(self):
-        return Markers('children_story', self.date)
-
-    # def read_sql(self, filename):
-    #     with open(filename, 'r') as ymlfile:
-    #         data = yaml.load(ymlfile)
-    #         self.output().execute(data['sql'])  
-
-    def run(self):
-        s = MySQL.execute_yaml_file("todays_top_story.yaml") #FIX tried using self.output().read_sql but...
-        mark = self.output()
-        mark.mark_table()
-
-  
-class StoryCount(luigi.Task):
-    date_interval = luigi.DateIntervalParameter()
+        return Markers(self.file, self._hourstamp())
 
     def requires(self):
-        return [Story(date) for date in self.date_interval]
-
-    def output(self):
-    	return Markers('children_stories_count', self.date_interval)
-
-    def run(self):
-        row = MySQL.execute_yaml_file("story_count.yaml")
-        mark = self.output()
-        mark.mark_table()
-        return
-                
-
-
-class YamlPoweredTask(luigi.Task):
-    file_name = ""
-    yaml = dict()#somehow_read_yaml()
-
-    def requires(self):
-        return [YamlPoweredTask(file_name=dependency) for dependency in self.yaml['dependencies']]
+        """
+        If there are one or more dependant files specified in the YAML header
+        of the .sql file they'll be instantiated here as tasks and returned.
+        """
+        self._parse()
+        if 'requires' in self.config:
+            return [self._subtask(dependency) for dependency in self.config['requires']]
 
     def run(self):
-        execute(self.yaml['sql'])
+        self._parse()
+        for query in self.queries:
+            Redshift.execute(query)
+        self.output().mark_table()
+
+    # Customize the naming of the task
+    def task_family(self):
+        return self.task_family
+
+    def _subtask(self, otherfile):
+        """
+        Instantiate another HsqlTask for a different .sql file
+        """
+        dir = os.path.dirname(self.file)
+        otherpath = os.path.join(dir, otherfile) + '.sql'
+        return HsqlTask(file=otherpath, environment=self.environment)
+
+    def _hourstamp(self):
+        return self.hour.strftime('%Y-%m-%dT%H')
+
+    def _parse(self):
+        """
+        Executes just one time to read the .sql file and any associated config
+        """
+        if self.queries:
+            return
+
+        # Read the YAML front matter from the file
+        self.config = yaml.load(subprocess.check_output([
+            'hsql', self.file,
+                    '--env', self.environment,
+                    '--yaml'
+        ]))
+
+        # Read the normalized queries from the file
+        self.queries = subprocess.check_output([
+            'hsql', self.file,
+                    '--env', self.environment,
+                    '--date', "'" + self._hourstamp() + "'"
+        ]).splitlines()
+
+
+    @staticmethod
+    def file_to_id(filename):
+        id = filename.replace('.sql', '')
+        parts = id.split('/')
+        id = "/".join("".join(x.capitalize() for x in part.split('_')) for part in parts)
+        return id.strip()
 
 if __name__ == "__main__":
-    conn = t.connect()
-    print dir(conn)
-    cursor = conn.cursor()
-    print dir(cursor)
-    cursor.execute("select relname from pg_class where relkind='r' and relname !~ '^(pg_|sql_)';")
-    print cursor.fetchall()
-
+    print Markers.truncate()
     luigi.run()
