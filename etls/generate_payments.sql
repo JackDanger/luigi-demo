@@ -1,7 +1,7 @@
 owner: jackdanger
 schedule: daily
 data:
-  number_of_rows: 100000
+  number_of_rows: 10000
   payment_types:
     - CardPayment
     - CardPayment
@@ -12,8 +12,8 @@ data:
 ---
 
 -- Generates 100,000 payments at random times during the day "{{{ now }}}"
-DROP TABLE {{table}};
-CREATE TABLE {{table}} (
+DROP TABLE IF EXISTS {{{ table }}};
+CREATE TABLE  {{{ table }}} (
   id           SERIAL,
   amount_cents integer NOT NULL,
   type         VARCHAR(32) NOT NULL,
@@ -21,7 +21,7 @@ CREATE TABLE {{table}} (
 );
 
 {{#payment_types}}
-INSERT INTO {{table}} (amount_cents, type, created_at)
+INSERT INTO {{{ table }}} (amount_cents, type, created_at)
   SELECT
     random() * 1000, -- cents
     '{{{.}}}', -- this is the value of `payment_types` in this loop
