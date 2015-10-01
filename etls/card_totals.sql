@@ -3,7 +3,6 @@ schedule: daily
 requires:
   - generate_payments
 data:
-  sleep: 1
   production:
     output_table: card_totals
     input_table: payments
@@ -11,13 +10,13 @@ data:
     output_table: jackdanger_card_totals
     input_table: jackdanger_payments
 ---
-DROP TABLE IF EXISTS {{{ output_table }}};
+-- DROP TABLE IF EXISTS {{{ output_table }}};
 
-CREATE TABLE  {{{ output_table }}} (
-  id           SERIAL,
+CREATE TABLE IF NOT EXISTS {{{ output_table }}} (
   total        integer NOT NULL,
   date         date NOT NULL,
-  created_at   timestamp DEFAULT current_timestamp
+  created_at   timestamp DEFAULT current_timestamp,
+  PRIMARY KEY  (date)
 );
 
 INSERT INTO {{{ output_table }}} (total, date)
@@ -26,6 +25,4 @@ INSERT INTO {{{ output_table }}} (total, date)
   WHERE type = 'CardPayment' -- Demonstrating an inline comment
     AND DATE(created_at) = DATE({{{ now }}})
   GROUP BY DATE(created_at);
-
-SELECT pg_sleep({{{sleep}}});
 

@@ -11,15 +11,17 @@ import os
 import re
 
 class MySQL:
+    connection = None
+
     @staticmethod
     def execute(sql):
-        connection = mysql.connector.connect(user='user', host='localhost', database='luigid')
-        connection.connect()
-        cursor = connection.cursor()
+        if self.connection is None:
+            self.connection = mysql.connector.connect(user='user', host='localhost', database='luigid')
+        self.connection.connect()
+        cursor = self.connection.cursor()
         cursor.execute(sql)
         row = cursor.fetchone()
-        connection.commit()
-        connection.close()
+        self.connection.commit()
         return row
 
     @staticmethod
@@ -63,11 +65,10 @@ class Markers(luigi.Target):
         Redshift.execute(
             """
                 CREATE TABLE IF NOT EXISTS markers (
-                    id              BIGSERIAL
-                    , mark_key      VARCHAR(128)  NOT NULL
+                      mark_key      VARCHAR(128)  NOT NULL
                     , mark_value    VARCHAR(128)  NOT NULL
                     , inserted      TIMESTAMP DEFAULT NOW()
-                    , PRIMARY KEY (id)
+                    , PRIMARY KEY (mark_key, mark_value)
                 );
             """)
 
@@ -88,10 +89,11 @@ class Markers(luigi.Target):
         self.create_marker_table()
         Redshift.execute(
             """
-                INSERT INTO markers (mark_key, mark_value)
-                VALUES ('{key}', '{value}');
+                INSERT INTO markers (mark_key, mark_value, inserted)
+                VALUES ('{key}', '{value}', '{time}'::TIMESTAMP);
             """.format(key=self.key,
-                       value=self.value))
+                       value=self.value,
+                       time=datetime.datetime.utcnow()))
 
     @staticmethod
     def truncate():
@@ -110,28 +112,29 @@ class HsqlTask(luigi.Task):
     #   2015-06-02T00 (midnight UTC on June 2nd)
     #   2015-08-04T17 (1700 hours UTC on August 4th)
     hour = luigi.DateHourParameter(default=datetime.datetime.utcnow())
-    task_id = 'hsql'
-    _queries = None
-    _config = None
 
-    def __init__(self, *args, **kwargs):
-        # Customize the task name
+    #def __init__(self, *args, **kwargs):
+    #    # Customize the task name
 
-        # Set a custom task_family instead of the class name
-        self.task_family = HsqlTask.file_to_id(kwargs['file'])
+    #    # Set a custom task_family instead of the class name
+    #    self.task_family = HsqlTask.file_to_id(kwargs['file'])
 
-        # This is mostly copied from luigi/task.py's __init__
-        param_values = self.get_param_values(self.get_params(), args, kwargs)
-        task_id_parts = []
-        for name, value in param_values:
-            if name is not 'file':
-                task_id_parts.append('%s=%s' % (name, value))
-        self.task_id = '%s(%s)' % (self.task_family, ', '.join(task_id_parts))
+    #    # This is mostly copied from luigi/task.py's __init__
+    #    param_values = self.get_param_values(self.get_params(), args, kwargs)
+    #    task_id_parts = []
+    #    for name, value in param_values:
+    #        if name is not 'file':
+    #            task_id_parts.append('%s=%s' % (name, value))
+    #    self.task_id = '%s(%s)' % (self.task_family, ', '.join(task_id_parts))
 
-        super(HsqlTask, self).__init__(*args, **kwargs)
+    #    super(HsqlTask, self).__init__(*args, **kwargs)
 
     def output(self):
-        return Markers(self.file, self._hourstamp())
+        if self.schedule() == 'daily':
+            key = self.hour.strftime('%Y-%m-%d')
+        else:
+            key = self.hour.strftime('%Y-%m-%dT%H')
+        return Markers(self.file, key)
 
     def requires(self):
         """
@@ -143,23 +146,32 @@ class HsqlTask(luigi.Task):
             return [self._subtask(dependency) for dependency in c['requires']]
 
     def run(self):
-        for query in self.queries():
-            Redshift.execute(query)
+        for index in xrange(len(self.queries())):
+            query = self.queries()[index]
+            print "Executing query #" + str(index) + " of " + self.file
+            start = datetime.datetime.utcnow()
+
+            print Redshift.execute(query)
+
+            end = datetime.datetime.utcnow()
+            print "-> in " + str((end - start).total_seconds()) + " seconds"
+
         self.output().mark_table()
 
     # Customize the naming of the task
+    @property
     def task_family(self):
-        return self.task_family
+        return HsqlTask.file_to_id(self.file)
 
     def queries(self):
         """A list of SQL queries as defined in the .sql file (and parsed by hsql)"""
         self._parse()
-        return self._queries
+        return getattr(self, '_queries')
 
     def config(self):
         """The YAML front matter of the .sql file"""
         self._parse()
-        return self._config
+        return getattr(self, '_config')
 
     def schedule(self):
         """The 'schedule:' key from the YAML front matter of the .sql file"""
@@ -207,29 +219,26 @@ class HsqlTask(luigi.Task):
         return hh
 
 
-    def _hourstamp(self):
-        return self.hour.strftime('%Y-%m-%dT%H')
-
     def _parse(self):
         """
         Executes just one time to read the .sql file and any associated config
         """
-        if self._queries is not None:
+        if hasattr(self, '_queries'):
             return
 
         # Read the YAML front matter from the file
-        self._config = yaml.load(subprocess.check_output([
+        setattr(self, '_config', yaml.load(subprocess.check_output([
             'hsql', self.file,
                     '--env', self.environment,
                     '--yaml'
-        ]))
+        ])))
 
         # Read the normalized queries from the file
-        self._queries = subprocess.check_output([
+        setattr(self, '_queries', subprocess.check_output([
             'hsql', self.file,
                     '--env', self.environment,
-                    '--date', "'" + self._hourstamp() + "'"
-        ]).splitlines()
+                    '--date', "'" + self.hour.isoformat() + " UTC'"
+        ]).splitlines())
 
 
     @staticmethod
