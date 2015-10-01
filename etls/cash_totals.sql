@@ -14,13 +14,13 @@ data:
 
 CREATE TABLE IF NOT EXISTS {{{ output_table }}} (
   total        integer NOT NULL,
-  date         date NOT NULL,
+  day          date NOT NULL,
   created_at   timestamp DEFAULT current_timestamp,
   PRIMARY KEY  (date)
 );
 
-INSERT INTO {{{ output_table }}} (total, date)
-  SELECT COUNT(*) AS total, DATE(created_at) AS date
+INSERT INTO {{{ output_table }}} (total, day)
+  SELECT COUNT(*) AS total, DATE(created_at) AS day
   FROM {{{ input_table }}}
   WHERE type = 'CashPayment' -- Demonstrating an inline comment
     AND DATE(created_at) = DATE({{{ now }}})

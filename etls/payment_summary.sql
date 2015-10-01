@@ -19,18 +19,17 @@ data:
 -- DROP TABLE IF EXISTS {{{ output_table }}};
 
 CREATE TABLE IF NOT EXISTS {{{ output_table }}} (
-  id           SERIAL,
   total        integer NOT NULL,
   type         VARCHAR(32) NOT NULL,
-  date         date NOT NULL,
+  day          date NOT NULL,
   created_at   timestamp DEFAULT current_timestamp
 );
 
 {{#payment_tables}}
 -- Inside a Mustache loop the '.' variable means this iteration's value for
 -- current value of the `payment_tables` list.
-INSERT INTO {{{output_table}}} (total, type, date)
-  SELECT total, '{{.}}', date
+INSERT INTO {{{output_table}}} (total, type, day)
+  SELECT total, '{{.}}', day
   FROM {{.}};
 {{/payment_tables}}
 
