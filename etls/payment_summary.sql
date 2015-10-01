@@ -4,6 +4,7 @@ requires:
   - card_totals
   - cash_totals
 data:
+  sleep: 5
   production:
     output_table: payment_totals
     payment_tables:
@@ -15,7 +16,11 @@ data:
       - jackdanger_cash_totals
       - jackdanger_card_totals
 ---
+SELECT pg_sleep({{{sleep}}});
+
 DROP TABLE IF EXISTS {{{ output_table }}};
+
+SELECT pg_sleep({{{sleep}}});
 
 CREATE TABLE {{{ output_table }}} (
   id           SERIAL,

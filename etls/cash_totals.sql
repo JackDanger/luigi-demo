@@ -3,6 +3,7 @@ schedule: daily
 requires:
   - generate_payments
 data:
+  sleep: 10
   production:
     output_table: cash_totals
     input_table: payments
@@ -18,9 +19,12 @@ CREATE TABLE  {{{ output_table }}} (
   date         date NOT NULL,
   created_at   timestamp DEFAULT current_timestamp
 );
+
 INSERT INTO {{{ output_table }}} (total, date)
   SELECT COUNT(*) AS total, DATE(created_at) AS date
   FROM {{{ input_table }}}
   WHERE type = 'CashPayment' -- Demonstrating an inline comment
     AND DATE(created_at) = DATE({{{ now }}})
-  GROUP BY DATE(created_at)
+  GROUP BY DATE(created_at);
+
+SELECT pg_sleep({{{sleep}}});
