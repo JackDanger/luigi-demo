@@ -183,7 +183,28 @@ class HsqlTask(luigi.Task):
                     """.format(
                         t1=self.file,
                         t2=task.file))
-        return task
+            # It's a valid hourly task
+            return task
+
+        # If a daily task depends on an hourly task we ensure that the task has
+        # been completed for every hour of the given day.
+        # We do this by instantiating a task for each our and returning the
+        # whole list, Luigi takes care of the task resolution.
+        if self.schedule() == 'daily':
+            if task.schedule() == 'hourly':
+                print 'going'
+                return [HsqlTask(file=otherpath,
+                                 environment=self.environment,
+                                 hour=hour) for hour in self.hours()]
+            else:
+                return task;
+
+    def hours(self):
+        """Returns a list of hour stamps within the given day"""
+        h = self.hour
+        hh = [datetime.datetime(h.year, h.month, h.day, hour) for hour in range(24)]
+        print hh
+        return hh
 
 
     def _hourstamp(self):

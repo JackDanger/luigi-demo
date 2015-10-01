@@ -3,7 +3,7 @@ schedule: daily
 requires:
   - generate_payments
 data:
-  sleep: 10
+  sleep: 1
   production:
     output_table: card_totals
     input_table: payments

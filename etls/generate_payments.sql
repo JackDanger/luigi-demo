@@ -1,7 +1,6 @@
 owner: jackdanger
-schedule: daily
+schedule: hourly
 data:
-  sleep: 1
   number_of_rows: 100000
   payment_types:
     - CardPayment
@@ -12,7 +11,6 @@ data:
     table: jackdanger_payments
 ---
 
-SELECT pg_sleep({{{sleep}}});
 -- Generates 100,000 payments at random times during the day "{{{ now }}}"
 DROP TABLE IF EXISTS {{{ table }}};
 CREATE TABLE  {{{ table }}} (
@@ -29,11 +27,11 @@ INSERT INTO {{{ table }}} (amount_cents, type, created_at)
     '{{{.}}}', -- this is the value of `payment_types` in this loop
     times.t
   FROM (
-    SELECT timestamp {{{ beginning_of_day }}} +
+    SELECT timestamp {{{ beginning_of_hour }}} +
          (
            (
-                timestamp {{{ end_of_day }}}
-              - timestamp {{{ beginning_of_day }}}
+                timestamp {{{ end_of_hour }}}
+              - timestamp {{{ beginning_of_hour }}}
             ) * random()
           ) t
     FROM generate_series(1, {{{ number_of_rows }}})

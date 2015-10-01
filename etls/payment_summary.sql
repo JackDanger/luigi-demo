@@ -4,7 +4,7 @@ requires:
   - card_totals
   - cash_totals
 data:
-  sleep: 5
+  sleep: 1
   production:
     output_table: payment_totals
     payment_tables:
