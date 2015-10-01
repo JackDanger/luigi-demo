@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS {{{ output_table }}} (
   total        integer NOT NULL,
   day          date NOT NULL,
   created_at   timestamp DEFAULT current_timestamp,
-  PRIMARY KEY  (date)
+  PRIMARY KEY  (day)
 );
 
 INSERT INTO {{{ output_table }}} (total, day)

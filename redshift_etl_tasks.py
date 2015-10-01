@@ -1,4 +1,3 @@
-import mysql.connector
 import luigi
 from luigi.contrib.redshift import RedshiftTarget
 
@@ -9,26 +8,6 @@ import datetime
 import subprocess
 import os
 import re
-
-class MySQL:
-    connection = None
-
-    @staticmethod
-    def execute(sql):
-        if self.connection is None:
-            self.connection = mysql.connector.connect(user='user', host='localhost', database='luigid')
-        self.connection.connect()
-        cursor = self.connection.cursor()
-        cursor.execute(sql)
-        row = cursor.fetchone()
-        self.connection.commit()
-        return row
-
-    @staticmethod
-    def execute_yaml_file(filename):
-        with open(filename, 'r') as ymlfile:
-            data = yaml.load(ymlfile)
-            return MySQL.execute(data['sql'])
 
 class Redshift:
     @staticmethod
@@ -74,7 +53,7 @@ class Markers(luigi.Target):
 
 
     def exists(self):
-        self.create_marker_table()
+        #self.create_marker_table()
         return Redshift.fetchone(
             """
                 SELECT 1
@@ -86,7 +65,7 @@ class Markers(luigi.Target):
                        value=self.value))
 
     def mark_table(self):
-        self.create_marker_table()
+        #self.create_marker_table()
         Redshift.execute(
             """
                 INSERT INTO markers (mark_key, mark_value, inserted)
@@ -151,7 +130,7 @@ class HsqlTask(luigi.Task):
             print "Executing query #" + str(index) + " of " + self.file
             start = datetime.datetime.utcnow()
 
-            print Redshift.execute(query)
+            Redshift.execute(query)
 
             end = datetime.datetime.utcnow()
             print "-> in " + str((end - start).total_seconds()) + " seconds"
