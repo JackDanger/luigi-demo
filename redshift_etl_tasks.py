@@ -40,14 +40,16 @@ class Redshift:
     @staticmethod
     def execute(sql):
         cursor = Redshift.cursor()
+        print "Executing:", sql
         cursor.execute(sql)
         return cursor
 
     @staticmethod
     def cursor():
         """Connects to Redshift, returns a cursor for the connection"""
+        env = os.environ['ENVIRONMENT'] if 'ENVIRONMENT' in os.environ else 'development'
         with open('database.yml', 'r') as ymlfile:
-            dbconfig = yaml.load(ymlfile)['localhost']
+            dbconfig = yaml.load(ymlfile)[env]
         connection = RedshiftTarget(**dbconfig).connect()
         connection.autocommit = True
         return connection.cursor()
@@ -93,7 +95,7 @@ class Markers(luigi.Target):
 
     @staticmethod
     def truncate():
-        """Remove all marker entries"""
+        """Dangerous!: Removes all marker entries"""
         return Redshift.execute(
             """
                 TRUNCATE markers;
@@ -108,9 +110,9 @@ class HsqlTask(luigi.Task):
     #   2015-06-02T00 (midnight UTC on June 2nd)
     #   2015-08-04T17 (1700 hours UTC on August 4th)
     hour = luigi.DateHourParameter(default=datetime.datetime.utcnow())
-    queries = None
-    config = None
     task_id = 'hsql'
+    _queries = None
+    _config = None
 
     def __init__(self, *args, **kwargs):
         # Customize the task name
@@ -136,13 +138,12 @@ class HsqlTask(luigi.Task):
         If there are one or more dependant files specified in the YAML header
         of the .sql file they'll be instantiated here as tasks and returned.
         """
-        self._parse()
-        if 'requires' in self.config:
-            return [self._subtask(dependency) for dependency in self.config['requires']]
+        c = self.config()
+        if 'requires' in c:
+            return [self._subtask(dependency) for dependency in c['requires']]
 
     def run(self):
-        self._parse()
-        for query in self.queries:
+        for query in self.queries():
             Redshift.execute(query)
         self.output().mark_table()
 
@@ -150,13 +151,40 @@ class HsqlTask(luigi.Task):
     def task_family(self):
         return self.task_family
 
+    def queries(self):
+        """A list of SQL queries as defined in the .sql file (and parsed by hsql)"""
+        self._parse()
+        return self._queries
+
+    def config(self):
+        """The YAML front matter of the .sql file"""
+        self._parse()
+        return self._config
+
+    def schedule(self):
+        """The 'schedule:' key from the YAML front matter of the .sql file"""
+        if 'schedule' in self.config():
+            return self.config()['schedule']
+
     def _subtask(self, otherfile):
         """
-        Instantiate another HsqlTask for a different .sql file
+        Instantiate another HsqlTask for a .sql file this task depends on.
         """
         dir = os.path.dirname(self.file)
         otherpath = os.path.join(dir, otherfile) + '.sql'
-        return HsqlTask(file=otherpath, environment=self.environment)
+        task = HsqlTask(file=otherpath, environment=self.environment, hour=self.hour)
+        # Hourly tasks cannot depend on daily tasks, the semantics are too confusing
+        # (specifically, does a 2pm task need today's (impossible) or yesterday's (stale) data?)
+        if self.schedule() == 'hourly':
+            if task.schedule() == 'daily':
+                raise AssertionError(
+                    """
+                      Hourly tasks ({t1}) cannot depend on daily tasks ({t2})
+                    """.format(
+                        t1=self.file,
+                        t2=task.file))
+        return task
+
 
     def _hourstamp(self):
         return self.hour.strftime('%Y-%m-%dT%H')
@@ -165,18 +193,18 @@ class HsqlTask(luigi.Task):
         """
         Executes just one time to read the .sql file and any associated config
         """
-        if self.queries:
+        if self._queries is not None:
             return
 
         # Read the YAML front matter from the file
-        self.config = yaml.load(subprocess.check_output([
+        self._config = yaml.load(subprocess.check_output([
             'hsql', self.file,
                     '--env', self.environment,
                     '--yaml'
         ]))
 
         # Read the normalized queries from the file
-        self.queries = subprocess.check_output([
+        self._queries = subprocess.check_output([
             'hsql', self.file,
                     '--env', self.environment,
                     '--date', "'" + self._hourstamp() + "'"
@@ -185,11 +213,16 @@ class HsqlTask(luigi.Task):
 
     @staticmethod
     def file_to_id(filename):
+        """
+            This supports prettier naming of the .sql files. A file named
+            'summaries/payments/daily_executive_report.sql'
+            Will be a task visible in the UI as
+            'Summaries/Payments/DailyExecutiveReport'
+        """
         id = filename.replace('.sql', '')
         parts = id.split('/')
         id = "/".join("".join(x.capitalize() for x in part.split('_')) for part in parts)
         return id.strip()
 
 if __name__ == "__main__":
-    print Markers.truncate()
     luigi.run()
